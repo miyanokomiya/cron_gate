@@ -13,6 +13,11 @@ fn main() {
     let matches = app.get_matches();
 
     if let Some(o) = matches.value_of("expression") {
-        println!("Expression: {}", Expression::new(o));
+        match Expression::new(o) {
+            Ok(exp) => {
+                println!("Expression: {:?}", exp);
+            }
+            Err(e) => eprintln!("{}", e),
+        }
     }
 }

@@ -10,9 +10,14 @@ pub struct Expression<'a> {
     pub minute: &'a str,
     pub hour: &'a str,
     pub date: &'a str,
-    pub day: &'a str,
     pub month: &'a str,
+    pub day: &'a str,
     pub command: &'a str,
+    pub minute_vec: Vec<i8>,
+    pub hour_vec: Vec<i8>,
+    pub date_vec: Vec<i8>,
+    pub month_vec: Vec<i8>,
+    pub day_vec: Vec<i8>,
 }
 
 impl<'a> fmt::Display for Expression<'a> {
@@ -20,7 +25,7 @@ impl<'a> fmt::Display for Expression<'a> {
         write!(
             f,
             "{} {} {} {} {} {}",
-            self.minute, self.hour, self.date, self.day, self.month, self.command
+            self.minute, self.hour, self.date, self.month, self.day, self.command
         )
     }
 }
@@ -33,29 +38,51 @@ impl<'a> Expression<'a> {
     /// ```
     /// use cron_gate::expression::Expression;
     ///
-    /// let e = Expression::new("* * * ? * command");
+    /// let e = Expression::new("1 2 3 4 5 command").unwrap();
     /// assert_eq!(e, Expression {
-    ///   minute: "*",
-    ///   hour: "*",
-    ///   date: "*",
-    ///   month: "?",
-    ///   day: "*",
+    ///   minute: "1",
+    ///   hour: "2",
+    ///   date: "3",
+    ///   month: "4",
+    ///   day: "5",
     ///   command: "command",
+    ///   minute_vec: vec![1],
+    ///   hour_vec: vec![2],
+    ///   date_vec: vec![3],
+    ///   month_vec: vec![4],
+    ///   day_vec: vec![5],
     /// });
     /// ```
-    pub fn new(expression_str: &str) -> Expression {
+    pub fn new(expression_str: &str) -> Result<Expression, String> {
         let spw: Vec<&str> = expression_str.split_whitespace().collect();
         if spw.len() != 6 {
             panic!("Invalid expression.")
         }
-        Expression {
+
+        let minute_vec = parse_block(spw[0], 0, 59)
+            .map_err(|e| format!("Error on minute: {}\n{}", spw[0], e))?;
+        let hour_vec = parse_block(spw[1], 0, 23)
+            .map_err(|e| format!("Error on hour: '{}'\n{}", spw[1], e))?;
+        let date_vec = parse_block(spw[2], 1, 31)
+            .map_err(|e| format!("Error on date: '{}'\n{}", spw[2], e))?;
+        let month_vec = parse_block(spw[3], 1, 12)
+            .map_err(|e| format!("Error on month: '{}'\n{}", spw[3], e))?;
+        let day_vec =
+            parse_block(spw[4], 0, 7).map_err(|e| format!("Error on day: '{}'\n{}", spw[4], e))?;
+
+        Ok(Expression {
             minute: spw[0],
             hour: spw[1],
             date: spw[2],
             month: spw[3],
             day: spw[4],
             command: spw[5],
-        }
+            minute_vec,
+            hour_vec,
+            date_vec,
+            month_vec,
+            day_vec,
+        })
     }
 }
 
@@ -63,19 +90,19 @@ impl<'a> Expression<'a> {
 /// ```
 /// use cron_gate::expression;
 ///
-/// let v = expression::parse_minute("1,2,30").unwrap();
-/// assert_eq!(v, vec![1, 2, 30]);
+/// let v = expression::parse_block("1,4-6,2-12/3", 0, 59).unwrap();
+/// assert_eq!(v, vec![1, 2, 4, 5, 6, 8, 11]);
 /// ```
-pub fn parse_minute(minute: &str) -> Result<Vec<i8>, String> {
+pub fn parse_block(minute: &str, min: i8, max: i8) -> Result<Vec<i8>, String> {
     let mut minutes: Vec<i8> = Vec::new();
     let units = minute.split(',');
     for u in units {
-        match parse_unit(u, 0, 59) {
+        match parse_unit(u, min, max) {
             Ok(mut v) => minutes.append(&mut v),
-            Err(e) => return Err(format!("Invalid expression on '{}': {}", u, e)),
+            Err(e) => return Err(format!("Invalid expression on '{}'\n{}", u, e)),
         };
     }
-    Ok(minutes)
+    Ok(uniq_and_sort(&minutes))
 }
 
 /// Returns numbers parsed from unit expression
@@ -102,8 +129,18 @@ pub fn parse_minute(minute: &str) -> Result<Vec<i8>, String> {
 /// ```
 /// use cron_gate::expression;
 ///
-/// let v = expression::parse_unit("2-4", 0, 5).unwrap();
-/// assert_eq!(v, vec![2, 3, 4]);
+/// let v = expression::parse_unit("9-11", 0, 20).unwrap();
+/// assert_eq!(v, vec![9, 10, 11]);
+/// ```
+///
+/// Interval
+/// ```
+/// use cron_gate::expression;
+///
+/// let v1 = expression::parse_unit("5-11/3", 0, 20).unwrap();
+/// assert_eq!(v1, vec![5, 8, 11]);
+/// let v2 = expression::parse_unit("*/10", 0, 20).unwrap();
+/// assert_eq!(v2, vec![0, 10, 20]);
 /// ```
 ///
 /// Error case
@@ -115,12 +152,12 @@ pub fn parse_minute(minute: &str) -> Result<Vec<i8>, String> {
 pub fn parse_unit(unit: &str, min: i8, max: i8) -> Result<Vec<i8>, String> {
     let mut ret: Vec<i8> = Vec::new();
 
-    if unit == "*" {
+    if unit.starts_with("*") {
         for i in min..(max + 1) {
             ret.push(i);
         }
     } else {
-        let re = Regex::new(r"^(\d)-(\d)$").unwrap();
+        let re = Regex::new(r"^(\d*)-(\d*)(/\d*)?$").unwrap();
         match re.captures(unit) {
             Some(caps) => match parse_range(caps, min, max) {
                 Ok(mut v) => ret.append(&mut v),
@@ -130,16 +167,41 @@ pub fn parse_unit(unit: &str, min: i8, max: i8) -> Result<Vec<i8>, String> {
                 match unit.parse::<i8>() {
                     Ok(n) => {
                         if n < min || max < n {
-                            return Err(format!("invalid range '{}'", unit));
+                            return Err(format!("Invalid range '{}'", unit));
                         }
                         ret.push(n);
                     }
-                    Err(_) => return Err(format!("cannot parse '{}'", unit)),
+                    Err(_) => return Err(format!("Cannot parse '{}'", unit)),
                 };
             }
         }
     }
-    Ok(ret)
+
+    Ok(filter_interval(&uniq_and_sort(&ret), parse_interval(unit)))
+}
+
+fn filter_interval(vec: &Vec<i8>, interval: i8) -> Vec<i8> {
+    let mut ret = Vec::new();
+    let from: i8;
+    if vec.len() > 0 {
+        from = vec[0];
+    } else {
+        from = 0;
+    }
+    for i in vec {
+        if (i - from) % interval == 0 {
+            ret.push(*i);
+        }
+    }
+    ret
+}
+
+fn parse_interval(unit: &str) -> i8 {
+    let re = Regex::new(r".*/(\d*)$").unwrap();
+    match re.captures(unit) {
+        Some(caps) => return caps[1].parse::<i8>().unwrap(),
+        None => return 1,
+    };
 }
 
 fn parse_range(caps: Captures, min: i8, max: i8) -> Result<Vec<i8>, String> {
@@ -150,28 +212,28 @@ fn parse_range(caps: Captures, min: i8, max: i8) -> Result<Vec<i8>, String> {
         Ok(n) => {
             ranmge_min = *n;
         }
-        Err(_) => return Err(format!("cannot parse '{}'", &caps[1])),
+        Err(_) => return Err(format!("Cannot parse '{}'", &caps[1])),
     };
     match &caps[2].parse::<i8>() {
         Ok(n) => {
             ranmge_max = *n;
         }
-        Err(_) => return Err(format!("cannot parse '{}'", &caps[2])),
+        Err(_) => return Err(format!("Cannot parse '{}'", &caps[2])),
     };
 
     if ranmge_min > ranmge_max {
         return Err(format!(
-            "left side cannot be greater than right one: {}",
+            "Left side cannot be greater than right one: {}",
             &caps[0]
         ));
     }
 
     if ranmge_min < min {
-        return Err(format!("invalid range: {}", ranmge_min));
+        return Err(format!("Invalid range: {}", ranmge_min));
     }
 
     if max < ranmge_max {
-        return Err(format!("invalid range: {}", ranmge_max));
+        return Err(format!("Invalid range: {}", ranmge_max));
     }
 
     for i in ranmge_min..(ranmge_max + 1) {
@@ -194,8 +256,19 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_filter_interval() {
+        assert_eq!(filter_interval(&vec![0, 1, 2, 3, 4], 3), [0, 3]);
+        assert_eq!(filter_interval(&vec![3, 4, 5, 6, 7], 2), [3, 5, 7]);
+    }
+
+    #[test]
+    fn test_parse_interval() {
+        assert_eq!(parse_interval("1/2"), 2);
+        assert_eq!(parse_interval("1/10"), 10);
+    }
+
+    #[test]
     fn test_parse_unit() {
-        assert_eq!(uniq_and_sort(&vec![1, 1, 2, 2, 3]), vec![1, 2, 3]);
         match parse_unit("0", 1, 4) {
             Ok(_) => assert!(false),
             Err(_) => assert!(true),
@@ -233,5 +306,10 @@ mod tests {
             Ok(_) => assert!(false),
             Err(_) => assert!(true),
         }
+    }
+
+    #[test]
+    fn test_uniq_and_sort() {
+        assert_eq!(uniq_and_sort(&vec![1, 1, 2, 2, 3]), vec![1, 2, 3]);
     }
 }
