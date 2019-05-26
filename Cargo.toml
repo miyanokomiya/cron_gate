@@ -1,0 +1,9 @@
+[package]
+name = "cron_gate"
+version = "0.1.0"
+authors = ["miyanokomiya"]
+edition = "2018"
+
+[dependencies]
+clap = "2.33.0"
+regex = "1.1.6"
