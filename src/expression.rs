@@ -95,12 +95,11 @@ impl<'a> Expression<'a> {
 /// ```
 pub fn parse_block(minute: &str, min: i8, max: i8) -> Result<Vec<i8>, String> {
     let mut minutes: Vec<i8> = Vec::new();
-    let units = minute.split(',');
-    for u in units {
-        match parse_unit(u, min, max) {
-            Ok(mut v) => minutes.append(&mut v),
-            Err(e) => return Err(format!("Invalid expression on '{}'\n{}", u, e)),
-        };
+    for u in minute.split(',') {
+        minutes.append(
+            &mut parse_unit(u, min, max)
+                .map_err(|e| format!("Invalid expression on '{}'\n{}", u, e))?,
+        );
     }
     Ok(uniq_and_sort(&minutes))
 }
@@ -159,20 +158,20 @@ pub fn parse_unit(unit: &str, min: i8, max: i8) -> Result<Vec<i8>, String> {
     } else {
         let re = Regex::new(r"^(\d*)-(\d*)(/\d*)?$").unwrap();
         match re.captures(unit) {
-            Some(caps) => match parse_range(caps, min, max) {
-                Ok(mut v) => ret.append(&mut v),
-                Err(e) => return Err(e),
-            },
+            Some(caps) => {
+                ret.append(&mut parse_range(caps, min, max)?);
+            }
             None => {
-                match unit.parse::<i8>() {
-                    Ok(n) => {
-                        if n < min || max < n {
-                            return Err(format!("Invalid range '{}'", unit));
-                        }
-                        ret.push(n);
-                    }
-                    Err(_) => return Err(format!("Cannot parse '{}'", unit)),
-                };
+                let n = unit
+                    .parse::<i8>()
+                    .map_err(|e| format!("Cannot parse '{}': {}", unit, e))?;
+                if n < min || max < n {
+                    return Err(format!(
+                        "Invalid range '{}': should be in {} to {}",
+                        unit, min, max
+                    ));
+                }
+                ret.push(n);
             }
         }
     }
@@ -198,28 +197,17 @@ fn filter_interval(vec: &Vec<i8>, interval: i8) -> Vec<i8> {
 
 fn parse_interval(unit: &str) -> i8 {
     let re = Regex::new(r".*/(\d*)$").unwrap();
-    match re.captures(unit) {
-        Some(caps) => return caps[1].parse::<i8>().unwrap(),
-        None => return 1,
-    };
+    re.captures(unit)
+        .map_or(1, |caps| caps[1].parse::<i8>().unwrap())
 }
 
 fn parse_range(caps: Captures, min: i8, max: i8) -> Result<Vec<i8>, String> {
-    let mut ret: Vec<i8> = Vec::new();
-    let ranmge_min: i8;
-    let ranmge_max: i8;
-    match &caps[1].parse::<i8>() {
-        Ok(n) => {
-            ranmge_min = *n;
-        }
-        Err(_) => return Err(format!("Cannot parse '{}'", &caps[1])),
-    };
-    match &caps[2].parse::<i8>() {
-        Ok(n) => {
-            ranmge_max = *n;
-        }
-        Err(_) => return Err(format!("Cannot parse '{}'", &caps[2])),
-    };
+    let ranmge_min = caps[1]
+        .parse::<i8>()
+        .map_err(|e| format!("Cannot parse '{}': {}", &caps[1], e))?;
+    let ranmge_max = caps[2]
+        .parse::<i8>()
+        .map_err(|e| format!("Cannot parse '{}': {}", &caps[2], e))?;
 
     if ranmge_min > ranmge_max {
         return Err(format!(
@@ -236,6 +224,7 @@ fn parse_range(caps: Captures, min: i8, max: i8) -> Result<Vec<i8>, String> {
         return Err(format!("Invalid range: {}", ranmge_max));
     }
 
+    let mut ret: Vec<i8> = Vec::new();
     for i in ranmge_min..(ranmge_max + 1) {
         ret.push(i);
     }
@@ -263,6 +252,7 @@ mod tests {
 
     #[test]
     fn test_parse_interval() {
+        assert_eq!(parse_interval("3"), 1);
         assert_eq!(parse_interval("1/2"), 2);
         assert_eq!(parse_interval("1/10"), 10);
     }
