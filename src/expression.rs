@@ -1,5 +1,7 @@
+extern crate chrono;
 extern crate regex;
 
+use chrono::{DateTime, Duration, Local};
 use regex::Captures;
 use regex::Regex;
 use std::collections::HashSet;
@@ -84,6 +86,29 @@ impl<'a> Expression<'a> {
             day_vec,
         })
     }
+}
+
+/// Returns the date range: from < x < to
+///
+/// # Examples
+/// ```
+/// extern crate chrono;
+/// use chrono::{DateTime, Duration, Local};
+/// use cron_gate::expression;
+///
+/// let from = Local::now();
+/// let to = from + Duration::days(3);
+/// let v = expression::get_date_range_between(from, to);
+/// assert_eq!(v, vec![from + Duration::days(1), from + Duration::days(2)]);
+/// ```
+pub fn get_date_range_between(from: DateTime<Local>, to: DateTime<Local>) -> Vec<DateTime<Local>> {
+    let mut ret = vec![];
+    let mut current = from + Duration::days(1);
+    while current < to {
+        ret.push(current);
+        current = current + Duration::days(1);
+    }
+    ret
 }
 
 /// # Examples
