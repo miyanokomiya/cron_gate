@@ -1,6 +1,7 @@
 extern crate chrono;
 extern crate regex;
 
+use chrono::offset::TimeZone;
 use chrono::{DateTime, Datelike, Duration, Local, Timelike, Weekday};
 use regex::Captures;
 use regex::Regex;
@@ -92,9 +93,9 @@ impl<'a> Expression<'a> {
     /// # Examples
     ///
     /// ```
-    /// use cron_gate::expression::Expression;
     /// use chrono::Local;
     /// use chrono::offset::TimeZone;
+    /// use cron_gate::expression::Expression;
     ///
     /// let e = Expression::new("1-7 3-6 2-5 3-4 3 command").unwrap();
     /// let from = Local.datetime_from_str("2019/5/4 3:2:1", "%Y/%m/%d %H:%M:%S").unwrap();
@@ -108,6 +109,82 @@ impl<'a> Expression<'a> {
         ret[3] = get_smalest_index_from(&self.month_vec, from.month());
         ret
     }
+
+    /// Returns earler datetimes from
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use chrono::Local;
+    /// use chrono::offset::TimeZone;
+    /// use cron_gate::expression::Expression;
+    ///
+    /// let e = Expression::new("0 9 27-29 5 * command").unwrap();
+    /// let from = Local.datetime_from_str("2019/5/28 0:0:0", "%Y/%m/%d %H:%M:%S").unwrap();
+    /// assert_eq!(e.earler_excuting_datetimes(from, 10), [
+    ///   Local.datetime_from_str("2019/5/28 9:0:0", "%Y/%m/%d %H:%M:%S").unwrap(),
+    ///   Local.datetime_from_str("2019/5/29 9:0:0", "%Y/%m/%d %H:%M:%S").unwrap(),
+    /// ]);
+    /// ```
+    pub fn earler_excuting_datetimes(
+        &self,
+        from: DateTime<Local>,
+        count: usize,
+    ) -> Vec<DateTime<Local>> {
+        let mut ret: Vec<DateTime<Local>> = vec![];
+
+        let indexes = self.earliest_date_time_index(from);
+
+        if indexes[3] >= self.month_vec.len() {
+            return ret;
+        }
+
+        for month_i in indexes[3]..self.month_vec.len() {
+            if indexes[2] >= self.date_vec.len() {
+                return ret;
+            }
+
+            let month = self.month_vec[month_i];
+            for date_i in indexes[2]..self.date_vec.len() {
+                if indexes[1] >= self.hour_vec.len() {
+                    return ret;
+                }
+
+                let date = self.date_vec[date_i];
+                for hour_i in indexes[1]..self.hour_vec.len() {
+                    if indexes[0] >= self.minute_vec.len() {
+                        return ret;
+                    }
+
+                    let hour = self.hour_vec[hour_i];
+                    for minute_i in indexes[0]..self.minute_vec.len() {
+                        let minute = self.minute_vec[minute_i];
+                        let datetime = Local
+                            .datetime_from_str(
+                                &format!(
+                                    "{}/{}/{} {}:{}:0",
+                                    from.year(),
+                                    month,
+                                    date,
+                                    hour,
+                                    minute
+                                ),
+                                "%Y/%m/%d %H:%M:%S",
+                            )
+                            .unwrap();
+                        if is_on_weekday(&datetime.weekday(), &self.day_vec) {
+                            ret.push(datetime);
+                            if ret.len() >= count {
+                                return ret;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        ret
+    }
 }
 
 fn is_on_weekday(weekday: &Weekday, v: &Vec<u32>) -> bool {
@@ -119,18 +196,6 @@ fn is_on_weekday(weekday: &Weekday, v: &Vec<u32>) -> bool {
         Weekday::Thu => v.into_iter().find(|&i| *i == 4).is_some(),
         Weekday::Fri => v.into_iter().find(|&i| *i == 5).is_some(),
         Weekday::Sat => v.into_iter().find(|&i| *i == 6).is_some(),
-    }
-}
-
-fn is_equal_weekday(weekday: &Weekday, w: u32) -> bool {
-    match weekday {
-        Weekday::Sun => w == 0 || w == 7,
-        Weekday::Mon => w == 1,
-        Weekday::Tue => w == 2,
-        Weekday::Wed => w == 3,
-        Weekday::Thu => w == 4,
-        Weekday::Fri => w == 5,
-        Weekday::Sat => w == 6,
     }
 }
 
@@ -324,6 +389,28 @@ fn uniq_and_sort(v: &Vec<u32>) -> Vec<u32> {
 mod tests {
     use super::*;
     use chrono::offset::TimeZone;
+
+    #[test]
+    fn test_earler_excuting_datetimes() {
+        let e = Expression::new("0 1-20/3 28 5 2 command").unwrap();
+        let from = Local
+            .datetime_from_str("2019/5/28 0:0:0", "%Y/%m/%d %H:%M:%S")
+            .unwrap();
+        assert_eq!(
+            e.earler_excuting_datetimes(from, 3),
+            [
+                Local
+                    .datetime_from_str("2019/5/28 1:0:0", "%Y/%m/%d %H:%M:%S")
+                    .unwrap(),
+                Local
+                    .datetime_from_str("2019/5/28 4:0:0", "%Y/%m/%d %H:%M:%S")
+                    .unwrap(),
+                Local
+                    .datetime_from_str("2019/5/28 7:0:0", "%Y/%m/%d %H:%M:%S")
+                    .unwrap(),
+            ]
+        );
+    }
 
     #[test]
     fn test_is_on_weekday() {
