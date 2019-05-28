@@ -1,7 +1,7 @@
 extern crate chrono;
 extern crate regex;
 
-use chrono::{DateTime, Duration, Local};
+use chrono::{DateTime, Datelike, Duration, Local, Timelike, Weekday};
 use regex::Captures;
 use regex::Regex;
 use std::collections::HashSet;
@@ -15,11 +15,11 @@ pub struct Expression<'a> {
     pub month: &'a str,
     pub day: &'a str,
     pub command: &'a str,
-    pub minute_vec: Vec<i8>,
-    pub hour_vec: Vec<i8>,
-    pub date_vec: Vec<i8>,
-    pub month_vec: Vec<i8>,
-    pub day_vec: Vec<i8>,
+    pub minute_vec: Vec<u32>,
+    pub hour_vec: Vec<u32>,
+    pub date_vec: Vec<u32>,
+    pub month_vec: Vec<u32>,
+    pub day_vec: Vec<u32>,
 }
 
 impl<'a> fmt::Display for Expression<'a> {
@@ -86,6 +86,61 @@ impl<'a> Expression<'a> {
             day_vec,
         })
     }
+
+    /// Returns a vec of indexes of the datetime earliest from
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use cron_gate::expression::Expression;
+    /// use chrono::Local;
+    /// use chrono::offset::TimeZone;
+    ///
+    /// let e = Expression::new("1-7 3-6 2-5 3-4 3 command").unwrap();
+    /// let from = Local.datetime_from_str("2019/5/4 3:2:1", "%Y/%m/%d %H:%M:%S").unwrap();
+    /// assert_eq!(e.earliest_date_time_index(from), [1, 0, 2, 2]);
+    /// ```
+    pub fn earliest_date_time_index(&self, from: DateTime<Local>) -> [usize; 4] {
+        let mut ret = [0; 4];
+        ret[0] = get_smalest_index_from(&self.minute_vec, from.minute());
+        ret[1] = get_smalest_index_from(&self.hour_vec, from.hour());
+        ret[2] = get_smalest_index_from(&self.date_vec, from.day());
+        ret[3] = get_smalest_index_from(&self.month_vec, from.month());
+        ret
+    }
+}
+
+fn is_on_weekday(weekday: &Weekday, v: &Vec<u32>) -> bool {
+    match weekday {
+        Weekday::Sun => v.into_iter().find(|&i| *i == 0 || *i == 7).is_some(),
+        Weekday::Mon => v.into_iter().find(|&i| *i == 1).is_some(),
+        Weekday::Tue => v.into_iter().find(|&i| *i == 2).is_some(),
+        Weekday::Wed => v.into_iter().find(|&i| *i == 3).is_some(),
+        Weekday::Thu => v.into_iter().find(|&i| *i == 4).is_some(),
+        Weekday::Fri => v.into_iter().find(|&i| *i == 5).is_some(),
+        Weekday::Sat => v.into_iter().find(|&i| *i == 6).is_some(),
+    }
+}
+
+fn is_equal_weekday(weekday: &Weekday, w: u32) -> bool {
+    match weekday {
+        Weekday::Sun => w == 0 || w == 7,
+        Weekday::Mon => w == 1,
+        Weekday::Tue => w == 2,
+        Weekday::Wed => w == 3,
+        Weekday::Thu => w == 4,
+        Weekday::Fri => w == 5,
+        Weekday::Sat => w == 6,
+    }
+}
+
+fn get_smalest_index_from(v: &Vec<u32>, from: u32) -> usize {
+    for (index, i) in v.iter().enumerate() {
+        if from <= *i {
+            return index;
+        }
+    }
+    v.len()
 }
 
 /// Returns the date range: from < x < to
@@ -118,8 +173,8 @@ pub fn get_date_range_between(from: DateTime<Local>, to: DateTime<Local>) -> Vec
 /// let v = expression::parse_block("1,4-6,2-12/3", 0, 59).unwrap();
 /// assert_eq!(v, vec![1, 2, 4, 5, 6, 8, 11]);
 /// ```
-pub fn parse_block(minute: &str, min: i8, max: i8) -> Result<Vec<i8>, String> {
-    let mut minutes: Vec<i8> = Vec::new();
+pub fn parse_block(minute: &str, min: u32, max: u32) -> Result<Vec<u32>, String> {
+    let mut minutes: Vec<u32> = Vec::new();
     for u in minute.split(',') {
         minutes.append(
             &mut parse_unit(u, min, max)
@@ -173,8 +228,8 @@ pub fn parse_block(minute: &str, min: i8, max: i8) -> Result<Vec<i8>, String> {
 ///
 /// expression::parse_unit("a", 0, 3).unwrap();
 /// ```
-pub fn parse_unit(unit: &str, min: i8, max: i8) -> Result<Vec<i8>, String> {
-    let mut ret: Vec<i8> = Vec::new();
+pub fn parse_unit(unit: &str, min: u32, max: u32) -> Result<Vec<u32>, String> {
+    let mut ret: Vec<u32> = Vec::new();
 
     if unit.starts_with("*") {
         for i in min..(max + 1) {
@@ -188,7 +243,7 @@ pub fn parse_unit(unit: &str, min: i8, max: i8) -> Result<Vec<i8>, String> {
             }
             None => {
                 let n = unit
-                    .parse::<i8>()
+                    .parse::<u32>()
                     .map_err(|e| format!("Cannot parse '{}': {}", unit, e))?;
                 if n < min || max < n {
                     return Err(format!(
@@ -204,9 +259,9 @@ pub fn parse_unit(unit: &str, min: i8, max: i8) -> Result<Vec<i8>, String> {
     Ok(filter_interval(&uniq_and_sort(&ret), parse_interval(unit)))
 }
 
-fn filter_interval(vec: &Vec<i8>, interval: i8) -> Vec<i8> {
+fn filter_interval(vec: &Vec<u32>, interval: u32) -> Vec<u32> {
     let mut ret = Vec::new();
-    let from: i8;
+    let from: u32;
     if vec.len() > 0 {
         from = vec[0];
     } else {
@@ -220,18 +275,18 @@ fn filter_interval(vec: &Vec<i8>, interval: i8) -> Vec<i8> {
     ret
 }
 
-fn parse_interval(unit: &str) -> i8 {
+fn parse_interval(unit: &str) -> u32 {
     let re = Regex::new(r".*/(\d*)$").unwrap();
     re.captures(unit)
-        .map_or(1, |caps| caps[1].parse::<i8>().unwrap())
+        .map_or(1, |caps| caps[1].parse::<u32>().unwrap())
 }
 
-fn parse_range(caps: Captures, min: i8, max: i8) -> Result<Vec<i8>, String> {
+fn parse_range(caps: Captures, min: u32, max: u32) -> Result<Vec<u32>, String> {
     let ranmge_min = caps[1]
-        .parse::<i8>()
+        .parse::<u32>()
         .map_err(|e| format!("Cannot parse '{}': {}", &caps[1], e))?;
     let ranmge_max = caps[2]
-        .parse::<i8>()
+        .parse::<u32>()
         .map_err(|e| format!("Cannot parse '{}': {}", &caps[2], e))?;
 
     if ranmge_min > ranmge_max {
@@ -249,15 +304,15 @@ fn parse_range(caps: Captures, min: i8, max: i8) -> Result<Vec<i8>, String> {
         return Err(format!("Invalid range: {}", ranmge_max));
     }
 
-    let mut ret: Vec<i8> = Vec::new();
+    let mut ret: Vec<u32> = Vec::new();
     for i in ranmge_min..(ranmge_max + 1) {
         ret.push(i);
     }
     Ok(ret)
 }
 
-/// Returns Vec<i8> having unique and sorted values
-fn uniq_and_sort(v: &Vec<i8>) -> Vec<i8> {
+/// Returns Vec<u32> having unique and sorted values
+fn uniq_and_sort(v: &Vec<u32>) -> Vec<u32> {
     let set: HashSet<_> = v.clone().drain(..).collect();
     let mut vec = vec![];
     vec.extend(set.into_iter());
@@ -268,6 +323,23 @@ fn uniq_and_sort(v: &Vec<i8>) -> Vec<i8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::offset::TimeZone;
+
+    #[test]
+    fn test_is_on_weekday() {
+        let tue = Local
+            .datetime_from_str("2019/5/28 0:0:0", "%Y/%m/%d %H:%M:%S")
+            .unwrap();
+        assert!(is_on_weekday(&tue.weekday(), &vec![2]));
+        assert!(!is_on_weekday(&tue.weekday(), &vec![0, 1, 3, 4, 5, 6, 7]));
+
+        let sun = Local
+            .datetime_from_str("2019/5/26 0:0:0", "%Y/%m/%d %H:%M:%S")
+            .unwrap();
+        assert!(is_on_weekday(&sun.weekday(), &vec![0]));
+        assert!(is_on_weekday(&sun.weekday(), &vec![7]));
+        assert!(!is_on_weekday(&sun.weekday(), &vec![1, 2, 3, 4, 5, 6]));
+    }
 
     #[test]
     fn test_filter_interval() {
