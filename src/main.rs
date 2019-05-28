@@ -19,7 +19,7 @@ fn main() {
                 let now = Local::now();
                 let datetimes = exp.earler_excuting_datetimes(now, 10);
                 for (i, dt) in datetimes.iter().enumerate() {
-                    println!("{}: {}", i + 1, dt.format("%m/%d %H:%M:%S").to_string());
+                    println!("{}: {}", i + 1, dt.format("%m/%d %H:%M").to_string());
                 }
             }
             Err(e) => eprintln!("{}", e),

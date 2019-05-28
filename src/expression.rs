@@ -132,55 +132,54 @@ impl<'a> Expression<'a> {
         count: usize,
     ) -> Vec<DateTime<Local>> {
         let mut ret: Vec<DateTime<Local>> = vec![];
-
-        let indexes = self.earliest_date_time_index(from);
+        let mut indexes = self.earliest_date_time_index(from);
 
         if indexes[3] >= self.month_vec.len() {
             return ret;
         }
 
         for month_i in indexes[3]..self.month_vec.len() {
-            if indexes[2] >= self.date_vec.len() {
-                return ret;
-            }
-
-            let month = self.month_vec[month_i];
-            for date_i in indexes[2]..self.date_vec.len() {
-                if indexes[1] >= self.hour_vec.len() {
-                    return ret;
-                }
-
-                let date = self.date_vec[date_i];
-                for hour_i in indexes[1]..self.hour_vec.len() {
-                    if indexes[0] >= self.minute_vec.len() {
-                        return ret;
-                    }
-
-                    let hour = self.hour_vec[hour_i];
-                    for minute_i in indexes[0]..self.minute_vec.len() {
-                        let minute = self.minute_vec[minute_i];
-                        let datetime = Local
-                            .datetime_from_str(
-                                &format!(
-                                    "{}/{}/{} {}:{}:0",
-                                    from.year(),
-                                    month,
-                                    date,
-                                    hour,
-                                    minute
-                                ),
-                                "%Y/%m/%d %H:%M:%S",
-                            )
-                            .unwrap();
-                        if is_on_weekday(&datetime.weekday(), &self.day_vec) {
-                            ret.push(datetime);
-                            if ret.len() >= count {
-                                return ret;
+            if indexes[2] < self.date_vec.len() {
+                let month = self.month_vec[month_i];
+                for date_i in indexes[2]..self.date_vec.len() {
+                    if indexes[1] < self.hour_vec.len() {
+                        let date = self.date_vec[date_i];
+                        for hour_i in indexes[1]..self.hour_vec.len() {
+                            if indexes[0] < self.minute_vec.len() {
+                                let hour = self.hour_vec[hour_i];
+                                for minute_i in indexes[0]..self.minute_vec.len() {
+                                    let minute = self.minute_vec[minute_i];
+                                    let datetime = Local
+                                        .datetime_from_str(
+                                            &format!(
+                                                "{}/{}/{} {}:{}:0",
+                                                from.year(),
+                                                month,
+                                                date,
+                                                hour,
+                                                minute
+                                            ),
+                                            "%Y/%m/%d %H:%M:%S",
+                                        )
+                                        .unwrap();
+                                    if is_on_weekday(&datetime.weekday(), &self.day_vec) {
+                                        ret.push(datetime);
+                                        if ret.len() >= count {
+                                            return ret;
+                                        }
+                                    }
+                                }
                             }
+                            indexes[0] = 0;
                         }
                     }
+                    indexes[0] = 0;
+                    indexes[1] = 0;
                 }
             }
+            indexes[0] = 0;
+            indexes[1] = 0;
+            indexes[2] = 0;
         }
 
         ret
