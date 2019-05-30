@@ -2,7 +2,7 @@ extern crate chrono;
 extern crate regex;
 
 use chrono::offset::TimeZone;
-use chrono::{DateTime, Datelike, Duration, Local, Timelike, Weekday};
+use chrono::{DateTime, Datelike, Duration, Local, ParseError, Timelike, Weekday};
 use regex::Captures;
 use regex::Regex;
 use std::collections::HashSet;
@@ -121,7 +121,7 @@ impl<'a> Expression<'a> {
     ///
     /// let e = Expression::new("0 9 27-29 5 * command").unwrap();
     /// let from = Local.datetime_from_str("2019/5/28 0:0:0", "%Y/%m/%d %H:%M:%S").unwrap();
-    /// assert_eq!(e.earler_excuting_datetimes(from, 10), [
+    /// assert_eq!(e.earler_excuting_datetimes(from, 2), [
     ///   Local.datetime_from_str("2019/5/28 9:0:0", "%Y/%m/%d %H:%M:%S").unwrap(),
     ///   Local.datetime_from_str("2019/5/29 9:0:0", "%Y/%m/%d %H:%M:%S").unwrap(),
     /// ]);
@@ -134,56 +134,68 @@ impl<'a> Expression<'a> {
         let mut ret: Vec<DateTime<Local>> = vec![];
         let mut indexes = self.earliest_date_time_index(from);
 
-        if indexes[3] >= self.month_vec.len() {
-            return ret;
-        }
-
-        for month_i in indexes[3]..self.month_vec.len() {
-            if indexes[2] < self.date_vec.len() {
-                let month = self.month_vec[month_i];
-                for date_i in indexes[2]..self.date_vec.len() {
-                    if indexes[1] < self.hour_vec.len() {
-                        let date = self.date_vec[date_i];
-                        for hour_i in indexes[1]..self.hour_vec.len() {
-                            if indexes[0] < self.minute_vec.len() {
-                                let hour = self.hour_vec[hour_i];
-                                for minute_i in indexes[0]..self.minute_vec.len() {
-                                    let minute = self.minute_vec[minute_i];
-                                    let datetime = Local
-                                        .datetime_from_str(
-                                            &format!(
-                                                "{}/{}/{} {}:{}:0",
-                                                from.year(),
-                                                month,
-                                                date,
-                                                hour,
-                                                minute
-                                            ),
-                                            "%Y/%m/%d %H:%M:%S",
-                                        )
-                                        .unwrap();
-                                    if is_on_weekday(&datetime.weekday(), &self.day_vec) {
-                                        ret.push(datetime);
-                                        if ret.len() >= count {
-                                            return ret;
+        for year in (from.year() as i64)..((from.year() as i64) + 4 * (count as i64)) {
+            if indexes[3] < self.month_vec.len() {
+                for month_i in indexes[3]..self.month_vec.len() {
+                    if indexes[2] < self.date_vec.len() {
+                        let month = self.month_vec[month_i];
+                        for date_i in indexes[2]..self.date_vec.len() {
+                            if indexes[1] < self.hour_vec.len() {
+                                let date = self.date_vec[date_i];
+                                for hour_i in indexes[1]..self.hour_vec.len() {
+                                    if indexes[0] < self.minute_vec.len() {
+                                        let hour = self.hour_vec[hour_i];
+                                        for minute_i in indexes[0]..self.minute_vec.len() {
+                                            let minute = self.minute_vec[minute_i];
+                                            match parse_datetime(year, month, date, hour, minute) {
+                                                Ok(datetime) => {
+                                                    if is_on_weekday(
+                                                        &datetime.weekday(),
+                                                        &self.day_vec,
+                                                    ) {
+                                                        ret.push(datetime);
+                                                        if ret.len() >= count {
+                                                            return ret;
+                                                        }
+                                                    }
+                                                }
+                                                Err(_) => { /* invalid date (e.g. 3/31) */ }
+                                            }
                                         }
                                     }
+                                    indexes[0] = 0;
                                 }
                             }
                             indexes[0] = 0;
+                            indexes[1] = 0;
                         }
                     }
                     indexes[0] = 0;
                     indexes[1] = 0;
+                    indexes[2] = 0;
                 }
             }
             indexes[0] = 0;
             indexes[1] = 0;
             indexes[2] = 0;
+            indexes[3] = 0;
         }
 
         ret
     }
+}
+
+fn parse_datetime(
+    year: i64,
+    month: u32,
+    date: u32,
+    hour: u32,
+    minute: u32,
+) -> Result<DateTime<Local>, ParseError> {
+    Local.datetime_from_str(
+        &format!("{}/{}/{} {}:{}:0", year, month, date, hour, minute),
+        "%Y/%m/%d %H:%M:%S",
+    )
 }
 
 fn is_on_weekday(weekday: &Weekday, v: &Vec<u32>) -> bool {
@@ -406,6 +418,72 @@ mod tests {
                     .unwrap(),
                 Local
                     .datetime_from_str("2019/5/28 7:0:0", "%Y/%m/%d %H:%M:%S")
+                    .unwrap(),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_earler_excuting_datetimes_short_month() {
+        let e = Expression::new("0 0 31 5-12 * command").unwrap();
+        let from = Local
+            .datetime_from_str("2019/5/1 0:0:0", "%Y/%m/%d %H:%M:%S")
+            .unwrap();
+        assert_eq!(
+            e.earler_excuting_datetimes(from, 3),
+            [
+                Local
+                    .datetime_from_str("2019/5/31 0:0:0", "%Y/%m/%d %H:%M:%S")
+                    .unwrap(),
+                Local
+                    .datetime_from_str("2019/7/31 0:0:0", "%Y/%m/%d %H:%M:%S")
+                    .unwrap(),
+                Local
+                    .datetime_from_str("2019/8/31 0:0:0", "%Y/%m/%d %H:%M:%S")
+                    .unwrap(),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_earler_excuting_datetimes_new_year() {
+        let e = Expression::new("0 0 * * * command").unwrap();
+        let from = Local
+            .datetime_from_str("2019/12/30 0:0:0", "%Y/%m/%d %H:%M:%S")
+            .unwrap();
+        assert_eq!(
+            e.earler_excuting_datetimes(from, 3),
+            [
+                Local
+                    .datetime_from_str("2019/12/30 0:0:0", "%Y/%m/%d %H:%M:%S")
+                    .unwrap(),
+                Local
+                    .datetime_from_str("2019/12/31 0:0:0", "%Y/%m/%d %H:%M:%S")
+                    .unwrap(),
+                Local
+                    .datetime_from_str("2020/1/1 0:0:0", "%Y/%m/%d %H:%M:%S")
+                    .unwrap(),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_earler_excuting_datetimes_leap_year() {
+        let e = Expression::new("0 0 29 2 * command").unwrap();
+        let from = Local
+            .datetime_from_str("2019/1/1 0:0:0", "%Y/%m/%d %H:%M:%S")
+            .unwrap();
+        assert_eq!(
+            e.earler_excuting_datetimes(from, 3),
+            [
+                Local
+                    .datetime_from_str("2020/2/29 0:0:0", "%Y/%m/%d %H:%M:%S")
+                    .unwrap(),
+                Local
+                    .datetime_from_str("2024/2/29 0:0:0", "%Y/%m/%d %H:%M:%S")
+                    .unwrap(),
+                Local
+                    .datetime_from_str("2028/2/29 0:0:0", "%Y/%m/%d %H:%M:%S")
                     .unwrap(),
             ]
         );
