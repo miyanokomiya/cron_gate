@@ -11,7 +11,7 @@ fn main() {
     let app = app_from_crate!()
         .arg(
             Arg::with_name("expression")
-                .help("Cron Expression '* * * 7 * command'")
+                .help("Cron Expression '* * * 7 * [command]'")
                 .required(true),
         )
         .arg(
@@ -53,9 +53,9 @@ fn main() {
     if let Some(o) = matches.value_of("expression") {
         match Expression::new(o) {
             Ok(exp) => {
-                let datetimes = exp.earler_excuting_datetimes(after, number);
+                let datetimes = exp.executing_dates(after, number);
                 for dt in datetimes {
-                    println!("{}", dt.format("%Y/%m/%d %H:%M").to_string());
+                    println!("{}", dt);
                 }
             }
             Err(e) => panic!(e),

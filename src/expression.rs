@@ -11,13 +11,30 @@ use std::fmt;
 pub const DATE_FORMAT: &str = "%Y/%m/%d %H:%M";
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct Expression<'a> {
-    pub minute: &'a str,
-    pub hour: &'a str,
-    pub date: &'a str,
-    pub month: &'a str,
-    pub day: &'a str,
-    pub command: &'a str,
+pub struct CronLine {
+    pub datetime: DateTime<Local>,
+    pub command: String,
+}
+
+impl fmt::Display for CronLine {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{} {}",
+            self.datetime.format("%Y/%m/%d %H:%M"),
+            self.command
+        )
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct Expression {
+    pub minute: String,
+    pub hour: String,
+    pub date: String,
+    pub month: String,
+    pub day: String,
+    pub command: String,
     pub minute_vec: Vec<u32>,
     pub hour_vec: Vec<u32>,
     pub date_vec: Vec<u32>,
@@ -25,7 +42,7 @@ pub struct Expression<'a> {
     pub day_vec: Vec<u32>,
 }
 
-impl<'a> fmt::Display for Expression<'a> {
+impl fmt::Display for Expression {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
@@ -35,7 +52,7 @@ impl<'a> fmt::Display for Expression<'a> {
     }
 }
 
-impl<'a> Expression<'a> {
+impl Expression {
     /// Returns a Expression
     ///
     /// # Examples
@@ -45,12 +62,12 @@ impl<'a> Expression<'a> {
     ///
     /// let e = Expression::new("1 2 3 4 5 command").unwrap();
     /// assert_eq!(e, Expression {
-    ///   minute: "1",
-    ///   hour: "2",
-    ///   date: "3",
-    ///   month: "4",
-    ///   day: "5",
-    ///   command: "command",
+    ///   minute: "1".to_string(),
+    ///   hour: "2".to_string(),
+    ///   date: "3".to_string(),
+    ///   month: "4".to_string(),
+    ///   day: "5".to_string(),
+    ///   command: "command".to_string(),
     ///   minute_vec: vec![1],
     ///   hour_vec: vec![2],
     ///   date_vec: vec![3],
@@ -60,8 +77,18 @@ impl<'a> Expression<'a> {
     /// ```
     pub fn new(expression_str: &str) -> Result<Expression, String> {
         let spw: Vec<&str> = expression_str.split_whitespace().collect();
-        if spw.len() != 6 {
-            panic!("Invalid expression.")
+
+        if spw.len() < 5 {
+            return Err(format!("Invalid expression: {}", expression_str));
+        }
+
+        let mut command = "[command]".to_string();
+        for i in 5..spw.len() {
+            if i == 5 {
+                command = spw[i].to_string();
+            } else {
+                command = format!("{} {}", command, spw[i]);
+            }
         }
 
         let minute_vec = parse_block(spw[0], 0, 59)
@@ -76,12 +103,12 @@ impl<'a> Expression<'a> {
             parse_block(spw[4], 0, 7).map_err(|e| format!("Error on day: '{}'\n{}", spw[4], e))?;
 
         Ok(Expression {
-            minute: spw[0],
-            hour: spw[1],
-            date: spw[2],
-            month: spw[3],
-            day: spw[4],
-            command: spw[5],
+            minute: spw[0].to_string(),
+            hour: spw[1].to_string(),
+            date: spw[2].to_string(),
+            month: spw[3].to_string(),
+            day: spw[4].to_string(),
+            command: command,
             minute_vec,
             hour_vec,
             date_vec,
@@ -184,6 +211,43 @@ impl<'a> Expression<'a> {
         }
 
         ret
+    }
+
+    /// Returns earler CronLines from
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use chrono::Local;
+    /// use chrono::offset::TimeZone;
+    /// use cron_gate::expression::{Expression, CronLine};
+    ///
+    /// let e = Expression::new("0 9 27-29 5 * command").unwrap();
+    /// let from = Local.datetime_from_str("2019/5/28 0:0", "%Y/%m/%d %H:%M").unwrap();
+    ///
+    /// let result = e.executing_dates(from, 2);
+    /// let expect = [
+    ///     CronLine {
+    ///         datetime: Local.datetime_from_str("2019/5/28 9:0", "%Y/%m/%d %H:%M").unwrap(),
+    ///         command: "command".to_string(),
+    ///     },
+    ///     CronLine {
+    ///         datetime: Local.datetime_from_str("2019/5/29 9:0", "%Y/%m/%d %H:%M").unwrap(),
+    ///         command: "command".to_string(),
+    ///     },
+    /// ];
+    /// assert_eq!(result, expect);
+    /// ```
+    pub fn executing_dates(&self, after: DateTime<Local>, number: usize) -> Vec<CronLine> {
+        let mut vec: Vec<CronLine> = vec![];
+        let datetimes = self.earler_excuting_datetimes(after, number);
+        for datetime in datetimes {
+            vec.push(CronLine {
+                datetime,
+                command: self.command.clone(),
+            });
+        }
+        vec
     }
 }
 
