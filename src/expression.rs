@@ -8,6 +8,8 @@ use regex::Regex;
 use std::collections::HashSet;
 use std::fmt;
 
+pub const DATE_FORMAT: &str = "%Y/%m/%d %H:%M";
+
 #[derive(Debug, PartialEq, Clone)]
 pub struct Expression<'a> {
     pub minute: &'a str,
@@ -98,7 +100,7 @@ impl<'a> Expression<'a> {
     /// use cron_gate::expression::Expression;
     ///
     /// let e = Expression::new("1-7 3-6 2-5 3-4 3 command").unwrap();
-    /// let from = Local.datetime_from_str("2019/5/4 3:2:1", "%Y/%m/%d %H:%M:%S").unwrap();
+    /// let from = Local.datetime_from_str("2019/5/4 3:2", "%Y/%m/%d %H:%M").unwrap();
     /// assert_eq!(e.earliest_date_time_index(from), [1, 0, 2, 2]);
     /// ```
     pub fn earliest_date_time_index(&self, from: DateTime<Local>) -> [usize; 4] {
@@ -120,10 +122,10 @@ impl<'a> Expression<'a> {
     /// use cron_gate::expression::Expression;
     ///
     /// let e = Expression::new("0 9 27-29 5 * command").unwrap();
-    /// let from = Local.datetime_from_str("2019/5/28 0:0:0", "%Y/%m/%d %H:%M:%S").unwrap();
+    /// let from = Local.datetime_from_str("2019/5/28 0:0", "%Y/%m/%d %H:%M").unwrap();
     /// assert_eq!(e.earler_excuting_datetimes(from, 2), [
-    ///   Local.datetime_from_str("2019/5/28 9:0:0", "%Y/%m/%d %H:%M:%S").unwrap(),
-    ///   Local.datetime_from_str("2019/5/29 9:0:0", "%Y/%m/%d %H:%M:%S").unwrap(),
+    ///   Local.datetime_from_str("2019/5/28 9:0", "%Y/%m/%d %H:%M").unwrap(),
+    ///   Local.datetime_from_str("2019/5/29 9:0", "%Y/%m/%d %H:%M").unwrap(),
     /// ]);
     /// ```
     pub fn earler_excuting_datetimes(
@@ -193,8 +195,8 @@ fn parse_datetime(
     minute: u32,
 ) -> Result<DateTime<Local>, ParseError> {
     Local.datetime_from_str(
-        &format!("{}/{}/{} {}:{}:0", year, month, date, hour, minute),
-        "%Y/%m/%d %H:%M:%S",
+        &format!("{}/{}/{} {}:{}", year, month, date, hour, minute),
+        DATE_FORMAT,
     )
 }
 
@@ -405,19 +407,19 @@ mod tests {
     fn test_earler_excuting_datetimes() {
         let e = Expression::new("0 1-20/3 28 5 2 command").unwrap();
         let from = Local
-            .datetime_from_str("2019/5/28 0:0:0", "%Y/%m/%d %H:%M:%S")
+            .datetime_from_str("2019/5/28 0:0", DATE_FORMAT)
             .unwrap();
         assert_eq!(
             e.earler_excuting_datetimes(from, 3),
             [
                 Local
-                    .datetime_from_str("2019/5/28 1:0:0", "%Y/%m/%d %H:%M:%S")
+                    .datetime_from_str("2019/5/28 1:0", DATE_FORMAT)
                     .unwrap(),
                 Local
-                    .datetime_from_str("2019/5/28 4:0:0", "%Y/%m/%d %H:%M:%S")
+                    .datetime_from_str("2019/5/28 4:0", DATE_FORMAT)
                     .unwrap(),
                 Local
-                    .datetime_from_str("2019/5/28 7:0:0", "%Y/%m/%d %H:%M:%S")
+                    .datetime_from_str("2019/5/28 7:0", DATE_FORMAT)
                     .unwrap(),
             ]
         );
@@ -427,19 +429,19 @@ mod tests {
     fn test_earler_excuting_datetimes_short_month() {
         let e = Expression::new("0 0 31 5-12 * command").unwrap();
         let from = Local
-            .datetime_from_str("2019/5/1 0:0:0", "%Y/%m/%d %H:%M:%S")
+            .datetime_from_str("2019/5/1 0:0", DATE_FORMAT)
             .unwrap();
         assert_eq!(
             e.earler_excuting_datetimes(from, 3),
             [
                 Local
-                    .datetime_from_str("2019/5/31 0:0:0", "%Y/%m/%d %H:%M:%S")
+                    .datetime_from_str("2019/5/31 0:0", DATE_FORMAT)
                     .unwrap(),
                 Local
-                    .datetime_from_str("2019/7/31 0:0:0", "%Y/%m/%d %H:%M:%S")
+                    .datetime_from_str("2019/7/31 0:0", DATE_FORMAT)
                     .unwrap(),
                 Local
-                    .datetime_from_str("2019/8/31 0:0:0", "%Y/%m/%d %H:%M:%S")
+                    .datetime_from_str("2019/8/31 0:0", DATE_FORMAT)
                     .unwrap(),
             ]
         );
@@ -449,19 +451,19 @@ mod tests {
     fn test_earler_excuting_datetimes_new_year() {
         let e = Expression::new("0 0 * * * command").unwrap();
         let from = Local
-            .datetime_from_str("2019/12/30 0:0:0", "%Y/%m/%d %H:%M:%S")
+            .datetime_from_str("2019/12/30 0:0", DATE_FORMAT)
             .unwrap();
         assert_eq!(
             e.earler_excuting_datetimes(from, 3),
             [
                 Local
-                    .datetime_from_str("2019/12/30 0:0:0", "%Y/%m/%d %H:%M:%S")
+                    .datetime_from_str("2019/12/30 0:0", DATE_FORMAT)
                     .unwrap(),
                 Local
-                    .datetime_from_str("2019/12/31 0:0:0", "%Y/%m/%d %H:%M:%S")
+                    .datetime_from_str("2019/12/31 0:0", DATE_FORMAT)
                     .unwrap(),
                 Local
-                    .datetime_from_str("2020/1/1 0:0:0", "%Y/%m/%d %H:%M:%S")
+                    .datetime_from_str("2020/1/1 0:0", DATE_FORMAT)
                     .unwrap(),
             ]
         );
@@ -471,19 +473,19 @@ mod tests {
     fn test_earler_excuting_datetimes_leap_year() {
         let e = Expression::new("0 0 29 2 * command").unwrap();
         let from = Local
-            .datetime_from_str("2019/1/1 0:0:0", "%Y/%m/%d %H:%M:%S")
+            .datetime_from_str("2019/1/1 0:0", DATE_FORMAT)
             .unwrap();
         assert_eq!(
             e.earler_excuting_datetimes(from, 3),
             [
                 Local
-                    .datetime_from_str("2020/2/29 0:0:0", "%Y/%m/%d %H:%M:%S")
+                    .datetime_from_str("2020/2/29 0:0", DATE_FORMAT)
                     .unwrap(),
                 Local
-                    .datetime_from_str("2024/2/29 0:0:0", "%Y/%m/%d %H:%M:%S")
+                    .datetime_from_str("2024/2/29 0:0", DATE_FORMAT)
                     .unwrap(),
                 Local
-                    .datetime_from_str("2028/2/29 0:0:0", "%Y/%m/%d %H:%M:%S")
+                    .datetime_from_str("2028/2/29 0:0", DATE_FORMAT)
                     .unwrap(),
             ]
         );
@@ -492,13 +494,13 @@ mod tests {
     #[test]
     fn test_is_on_weekday() {
         let tue = Local
-            .datetime_from_str("2019/5/28 0:0:0", "%Y/%m/%d %H:%M:%S")
+            .datetime_from_str("2019/5/28 0:0", DATE_FORMAT)
             .unwrap();
         assert!(is_on_weekday(&tue.weekday(), &vec![2]));
         assert!(!is_on_weekday(&tue.weekday(), &vec![0, 1, 3, 4, 5, 6, 7]));
 
         let sun = Local
-            .datetime_from_str("2019/5/26 0:0:0", "%Y/%m/%d %H:%M:%S")
+            .datetime_from_str("2019/5/26 0:0", DATE_FORMAT)
             .unwrap();
         assert!(is_on_weekday(&sun.weekday(), &vec![0]));
         assert!(is_on_weekday(&sun.weekday(), &vec![7]));
