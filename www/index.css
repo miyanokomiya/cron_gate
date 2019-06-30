@@ -1,0 +1,22 @@
+form div {
+  display: flex;
+  justify-content: space-between;
+  width: 400px;
+}
+input {
+  width: calc((100% - 24px) / 2);
+  font-size: 14px;
+}
+button {
+  margin-top: 0.4rem;
+  width: 100px;
+  height: 24px;
+  font-size: 14px;
+}
+textarea {
+  margin-top: 0.5rem;
+  height: 400px;
+  width: 400px;
+  font-size: 14px;
+  line-height: 1.2rem;
+}
