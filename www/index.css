@@ -1,0 +1,28 @@
+input, button, textarea {
+  font-family: Consolas, 'Courier New', Courier, Monaco, monospace;
+}
+
+form div {
+  display: flex;
+}
+label {
+  width: 5rem;
+}
+input {
+  width: 16rem;
+  font-size: 14px;
+}
+button {
+  margin-top: 0.4rem;
+  width: 100px;
+  height: 24px;
+  font-size: 14px;
+}
+textarea {
+  margin-top: 0.5rem;
+  height: 400px;
+  width: 400px;
+  font-size: 14px;
+  line-height: 1.2rem;
+  background-color: #eee;
+}

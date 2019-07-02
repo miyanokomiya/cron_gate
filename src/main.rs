@@ -16,7 +16,7 @@ fn main() {
         )
         .arg(
             Arg::with_name("after")
-                .help("Dates after 'Y/m/d H:M:S'")
+                .help("Dates after 'Y/m/d H:M'")
                 .short("a")
                 .long("after")
                 .takes_value(true),
