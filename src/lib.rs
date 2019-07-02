@@ -12,8 +12,7 @@ pub fn get_datetimes(text: &str, after_str: &str, number: i32) -> String {
     match Local.datetime_from_str(after_str, DATE_FORMAT) {
         Ok(a) => after = a,
         Err(e) => {
-            eprintln!("Invalid --after value: '{}'", after_str);
-            return format!("{}, {}", after_str, e.to_string());
+            return format!("{} is an invalid format of 'after': {}", after_str, e);
         }
     }
 
@@ -24,7 +23,7 @@ pub fn get_datetimes(text: &str, after_str: &str, number: i32) -> String {
             return vec.join("\n");
         }
         Err(e) => {
-            return e.to_string();
+            return format!("{} is an invalid format of 'cron': {}", text, e);
         }
     }
 }

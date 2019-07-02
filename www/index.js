@@ -3,6 +3,7 @@ import * as cron_gate from '../pkg/cron_gate'
 const $form = document.getElementById('form')
 const $input = document.getElementById('input')
 const $after = document.getElementById('after')
+const $number = document.getElementById('number')
 const $output = document.getElementById('output')
 
 $after.value = getNow()
@@ -15,9 +16,11 @@ $form.addEventListener('submit', e => {
 function exec () {
   const value = $input.value
   const after = $after.value
-  const text = cron_gate.get_datetimes(value, after, 20)
+  let number = parseInt($number.value)
+  if (number < 1) number = 20
+  $number.value = number
+  const text = cron_gate.get_datetimes(value, after, number)
   $output.value = text
-  console.log(text)
 }
 
 function getNow () {
